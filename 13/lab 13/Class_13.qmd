@@ -1,0 +1,228 @@
+---
+title: "13"
+format: pdf
+editor: visual
+---
+
+```{r}
+#| message: false
+library(DESeq2)
+```
+
+load data files
+
+```{r}
+#import metadata
+colData = read.csv("GSE37704_metadata.csv")
+head(colData)
+```
+
+```{r}
+# Import countdata
+countData = read.csv("GSE37704_featurecounts.csv", row.names=1)
+head(countData)
+```
+
+Remove odd first column
+
+```{r}
+# Note we need to remove the odd first $length col
+countData <- as.matrix(countData[,-1])
+```
+
+Remove rows with "0" values
+
+```{r}
+# Filter count data where you have 0 read count across all samples.
+countData = countData[rowSums(countData) > 0, ]
+```
+
+```{r}
+nrow(countData)
+```
+
+Set up DESeqDataSet object
+
+```{r}
+dds = DESeqDataSetFromMatrix(countData=countData,
+                             colData=colData,
+                             design= ~condition)
+dds = DESeq(dds)
+```
+
+```{r}
+dds
+```
+
+Get results for HoxA1 knockdown versus control siRNA. Check result labels:
+
+```{r}
+resultsNames(dds)
+```
+
+```{r}
+res = results(dds, contrast=c("condition", "hoxa1_kd", "control_sirna"))
+```
+
+Call `summary()` to get a sense of how many genes and up or down-regulated.
+
+```{r}
+summary(res)
+```
+
+## Volcano plot
+
+```{r}
+plot(res$log2FoldChange, -log(res$padj))
+```
+
+Improve plot by adding color and axis labels
+
+```{r}
+# Make a color vector for all genes
+mycols <- rep("gray", nrow(res) )
+
+# Color red the genes with absolute fold change above 2
+mycols[ abs(res$log2FoldChange) > 2 ] <- "red"
+
+# Color blue those with adjusted p-value less than 0.01
+#  and absolute fold change more than 2
+inds <- (res$padj) < .01 & (abs(res$log2FoldChange) > 2 )
+mycols[ inds ] <- "blue"
+
+plot( res$log2FoldChange, -log(res$padj), col=mycols, xlab="Log2(FoldChange)", ylab="-Log(P-value)" )
+```
+
+## Annotation results
+
+I need to add annotation to my results including gene symbols and entrezids etc. For this I will use the **AnnotationDbi** package
+
+```{r}
+library(AnnotationDbi)
+library("org.Hs.eg.db")
+
+columns(org.Hs.eg.db)
+
+res$symbol = mapIds(org.Hs.eg.db,
+                    keys= row.names(res),
+                    keytype= "ENSEMBL",
+                    column = "SYMBOL",
+                    multiVals="first")
+
+res$entrez = mapIds(org.Hs.eg.db,
+                    keys= row.names(res),
+                    keytype= "ENSEMBL",
+                    column = "ENTREZID",
+                    multiVals="first")
+
+res$name = mapIds(org.Hs.eg.db,
+                    keys= row.names(res),
+                    keytype= "ENSEMBL",
+                    column = "GENENAME",
+                    multiVals="first")
+
+head(res, 10)
+```
+
+Save as a csv file
+
+```{r}
+res = res[order(res$pvalue),]
+write.csv( res, file = "deseq_results.csv")
+```
+
+## Pathway Analysis
+
+```{r}
+#| message: false
+library(pathview)
+
+library(gage)
+library(gageData)
+```
+
+```{r}
+data(kegg.sets.hs)
+data(sigmet.idx.hs)
+
+# Focus on signaling and metabolic pathways only
+kegg.sets.hs <- kegg.sets.hs[sigmet.idx.hs]
+
+# Examine the first 3 pathways
+head(kegg.sets.hs, 3)
+```
+
+fold change results
+
+```{r}
+foldchanges = res$log2FoldChange
+names(foldchanges) = res$entrez
+head(foldchanges)
+```
+
+Run `gage` pathway analysis
+
+```{r}
+keggres = gage(foldchanges, gsets=kegg.sets.hs)
+```
+
+```{r}
+attributes(keggres)
+```
+
+```{r}
+# Look at the first few down (less) pathways
+head(keggres$less)
+head(keggres$greater)
+```
+
+Each `keggres$less` and `keggres$greater` object is data matrix with gene sets as rows sorted by p-value.
+
+The top "less/down" pathways is "Cell cycle" with the KEGG pathway identifier hsa04110.
+
+`Pathview()` function to make pathway plot from pathway.id: "hsa04110"
+
+```{r}
+pathview(gene.data=foldchanges, pathway.id="hsa04110")
+```
+
+Different pathways
+
+```{r}
+# A different PDF based output of the same data
+pathview(gene.data=foldchanges, pathway.id="hsa04110", kegg.native=FALSE)
+```
+
+Process results to automagicaly pull out the top 5 upregulated pathways. Further process to get pathway IDs needed by the `pathview()` function.
+
+We'll use these KEGG pathway IDs for pathview plotting below.
+
+```{r}
+## Focus on top 5 upregulated pathways here for demo purposes only
+keggrespathways_up <- rownames(keggres$greater)[1:5]
+
+# Extract the 8 character long IDs part of each string
+keggresids_up = substr(keggrespathways_up, start=1, stop=8)
+keggresids_up
+```
+
+pass these IDs in `keggresids` to the `pathview()` function to draw plots for all the top 5 pathways.
+
+```{r}
+pathview(gene.data=foldchanges, pathway.id=keggresids_up, species="hsa")
+```
+
+> Q. Can you do the same procedure as above to plot the pathview figures for the top 5 down-reguled pathways?
+
+```{r}
+## Focus on top 5 down-regulated pathways here for demo purposes only
+keggrespathways_down <- rownames(keggres$less)[1:5]
+
+# Extract the 8 character long IDs part of each string
+keggresids_down = substr(keggrespathways_down, start=1, stop=8)
+keggresids_down
+```
+
+```{r}
+pathview(gene.data=foldchanges, pathway.id=keggresids_down, species="hsa")
+```
