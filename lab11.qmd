@@ -1,0 +1,91 @@
+---
+title: "class11"
+format: pdf
+editor: visual
+---
+
+# Section 1. Proportion of G/G in a population
+
+Read csv file for MXL data
+
+```{r}
+#mexican data in LA
+mxl <-  read.csv("373531-SampleGenotypes-Homo_sapiens_Variation_Sample_rs8067378.csv")
+head(mxl)
+
+```
+
+```{r}
+table(mxl$Genotype..forward.strand.)
+#table summarizes data... shows number of each occurance
+```
+
+To find proportion, divide by total number of people in data set
+
+```{r}
+round(table(mxl$Genotype..forward.strand.) / nrow(mxl) * 100, 2)
+#G|G is quite low...
+```
+
+read GBR data and find proportion
+
+```{r}
+gbr <- read.csv("373522-SampleGenotypes-Homo_sapiens_Variation_Sample_rs8067378.csv")
+round(table(gbr$Genotype..forward.strand.) / nrow(gbr) * 100, 2)
+```
+
+This variant that is associated with childhood asthma is more frequent in the GBR population than MXL
+
+## Section 4. Population Scale Analysis
+
+How many samples do we have?
+
+```{r}
+expr <- read.table("rs8067378_ENSG00000172057.6.txt")
+head(expr)
+```
+
+```{r}
+nrow(expr)
+```
+
+> Q13: Read this file into R and determine the sample size for each genotype and their corresponding median expression levels for each of these genotypes.
+
+Sample Size:
+
+```{r}
+table(expr$geno)
+```
+
+Median Expression
+
+```{r}
+median_A_A <- median(expr$exp[expr$geno == "A/A"])
+
+median_A_G <- median(expr$exp[expr$geno == "A/G"])
+
+median_G_G <- median(expr$exp[expr$geno == "G/G"])
+
+print(median_A_A)
+print(median_A_G)
+print(median_G_G)
+```
+
+> Q14: Generate a boxplot with a box per genotype, what could you infer from the relative expression value between A/A and G/G displayed in this plot? Does the SNP effect the expression of ORMDL3?
+
+```{r}
+library(ggplot2)
+```
+
+```{r}
+ggplot(expr) + aes(x=geno, y=exp, fill=geno) +
+  geom_boxplot(notch=T)
+```
+
+A\|A expression value is higher than G\|G.
+
+```{r}
+nrow(read.csv("Galaxy3-[HG00109_1.fastq].fastqsanger"))
+```
+
+the rs8067378 SNP does seem to have an effect on expression of ORMDL3. When one A is replaced with G, there is less expression. When both are replaced with G, there is even less expression.
